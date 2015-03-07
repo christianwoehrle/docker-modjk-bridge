@@ -1,6 +1,7 @@
 package main
 
 import (
+	"container/list"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 )
 
 var Version string
+
+var debug = false
 
 var hostIp = flag.String("ip", "", "IP for ports mapped to the host")
 var internal = flag.Bool("internal", false, "Use internal ports instead of published ones")
@@ -79,42 +82,89 @@ func main() {
 	events := make(chan *dockerapi.APIEvents)
 	assert(docker.AddEventListener(events))
 
+	workersString := createWorkers()
+	writeFile("/tmp/workers.properties", workersString)
+	if debug {
+		log.Println("Listening for Docker events ...")
+	}
+
+	quit := make(chan struct{})
+
+	// Process Docker events
+	for msg := range events {
+		switch msg.Status {
+		case "start":
+			log.Println("Start event ...")
+			workersString := createWorkers()
+			writeFile("/tmp/workers.properties", workersString)
+
+			//for
+		case "die":
+			log.Println("Die event ...")
+		case "stop", "kill":
+			log.Println("Stop event ...")
+		}
+	}
+
+	close(quit)
+	log.Fatal("Docker event loop closed") // todo: reconnect?
+
+}
+
+func createWorkers() string {
+
 	config := consulapi.DefaultConfig()
 	config.Address = "192.168.1.125:8500"
 	client, res := consulapi.NewClient(config)
-	log.Println("Client", client, res)
+	if debug {
+		if debug {
+
+			log.Println("Client", client, res)
+		}
+	}
 	agent := client.Agent()
-	log.Println("Agent", agent)
 	nodename, res := agent.NodeName()
-	log.Println("NodeName", nodename, res)
+	if debug {
+		log.Println("NodeName", nodename, res)
+	}
 	services, res := agent.Services()
-	log.Println("Services", services, services["dude"])
 
 	clusterMap := make(map[string]*consulapi.AgentService)
-	tomcatServices := [100]*consulapi.AgentService{}
-	i := 0
+	//tomcatServices := [100]*consulapi.AgentService{}
+	var tomcatList list.List
 	for servicename, service := range services {
-		log.Println("---------------------------------------------------------")
-		log.Println("Servicename: ", servicename)
-		log.Println("Address: ", service.Address)
-		log.Println("Port: ", service.Port)
-		log.Println("Tags: ", service.Tags)
-		log.Println("Service: ", service.Service)
+		if debug {
+			log.Println("---------------------------------------------------------")
+			log.Println("Servicename: ", servicename)
+			log.Println("Address: ", service.Address)
+			log.Println("Port: ", service.Port)
+			log.Println("Tags: ", service.Tags)
+			log.Println("Service: ", service.Service)
+		}
 		tags := service.Tags
 		if stringInSlice("tomcat-service", tags) {
 			log.Println("TOMCAT SERVICE!!!!!!!!!!!!!!!")
 			clusterMap[service.Service] = service
-			tomcatServices[i] = service
-			i = i + 1
+			//tomcatServices[i] = service
+			tomcatList.PushBack(service)
 		}
-		log.Println("Service: ", service)
+		if debug {
+			log.Println("Service: ", service)
+		}
+
+	}
+	tomcatServices := make([]*consulapi.AgentService, tomcatList.Len())
+	for e, i := tomcatList.Front(), 0; e != nil; e, i = e.Next(), i+1 {
+		tomcatServices[i] = e.Value.(*consulapi.AgentService)
 
 	}
 	worker_list := "worker.list=jkstatus"
 	log.Println(clusterMap)
 	for worker, list := range clusterMap {
 		worker_list = worker_list + ",cluster_" + worker
-		log.Println("---------------------->", worker, list, worker_list)
+		if debug {
+			log.Println("---------------------->", worker, list, worker_list)
+		}
 	}
 
 	// die einzelnen Loadbalancerkonfigurationen aufbauen
@@ -127,7 +177,10 @@ func main() {
 		cluster_worker = "worker.cluster_" + worker + ".balance_workers="
 
 		for key, value := range tomcatServices {
-			log.Println(key, value)
+			if debug {
+				log.Println(key, value)
+			}
+
 			if tomcatServices[key] != nil {
 				if tomcatServices[key].Service == worker {
 					cluster_worker = cluster_worker + tomcatServices[key].ID + ","
@@ -141,7 +194,9 @@ func main() {
 	}
 	workersFile = workersFile + "\n\n"
 	for i, instance := range tomcatServices {
-		log.Println(i, instance, tomcatServices[i])
+		if debug {
+			log.Println(i, instance, tomcatServices[i])
+		}
 		if instance != nil {
 			hostname, key, port, _ := splitServiceName(tomcatServices[i].ID)
 
@@ -152,40 +207,14 @@ func main() {
 	}
 
 	log.Println("---------------------------------------------------------")
-	log.Println(worker_list)
-	log.Println(workersFile)
-	log.Println(worker_template)
-	
-	writeFile("/tmp/workers.properties", worker_list + workersFile + worker_template)
+	log.Println(worker_list, workersFile, worker_template)
+
+	writeFile("/tmp/workers.properties", worker_list+workersFile+worker_template)
 
 	//log.Println("getTagValue 123  12345", getTagValue("123", []string {"12345"}))
 	//log.Println("getTagValue 123  012345,123abd", getTagValue("123", []string {"012345", "123abd"}))
 	//log.Println("getTagValue 123  11aa12345", getTagValue("123", []string {"11aa12345"}))
-	log.Println("Listening for Docker events ...")
-
-	quit := make(chan struct{})
-
-	// Process Docker events
-	for msg := range events {
-		switch msg.Status {
-		case "start":
-			log.Println("Start event ...")
-
-			nodename, res := agent.NodeName()
-			log.Println("NodeName", nodename, res)
-			log.Println("Services res", res)
-
-			//for
-		case "die":
-			log.Println("Die event ...")
-		case "stop", "kill":
-			log.Println("Stop event ...")
-		}
-	}
-
-	close(quit)
-	log.Fatal("Docker event loop closed") // todo: reconnect?
-
+	return worker_list + workersFile + worker_template
 }
 
 //dude-server:tomcat_dude-server_8217:8009
@@ -208,7 +237,7 @@ func getTagValue(tagname string, taglist []string) string {
 func writeFile(filename string, content string) int {
 	file, err := os.Create(filename)
 	if err != nil {
-		log.Println( err, filename)
+		log.Println(err, filename)
 		return 1
 	}
 	defer file.Close()
