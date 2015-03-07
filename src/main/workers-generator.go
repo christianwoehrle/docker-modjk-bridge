@@ -61,12 +61,8 @@ func main() {
 		fmt.Println(Version)
 		os.Exit(0)
 	}
-	log.Printf("Starting registrator %s ...", Version)
-
 	flag.Parse()
 
-	log.Printf("parsed")
-	fmt.Println("hostIp1: ", *hostIp)
 	if *hostIp != "" {
 		log.Println("Forcing host IP to", *hostIp)
 	}
@@ -159,6 +155,8 @@ func main() {
 	log.Println(worker_list)
 	log.Println(workersFile)
 	log.Println(worker_template)
+	
+	writeFile("/tmp/workers.properties", worker_list + workersFile + worker_template)
 
 	//log.Println("getTagValue 123  12345", getTagValue("123", []string {"12345"}))
 	//log.Println("getTagValue 123  012345,123abd", getTagValue("123", []string {"012345", "123abd"}))
@@ -205,6 +203,20 @@ func getTagValue(tagname string, taglist []string) string {
 		}
 	}
 	return ""
+}
+
+func writeFile(filename string, content string) int {
+	file, err := os.Create(filename)
+	if err != nil {
+		log.Println( err, filename)
+		return 1
+	}
+	defer file.Close()
+	_, err = file.WriteString(content)
+	if err != nil {
+		return 2
+	}
+	return 0
 }
 
 func stringInSlice(a string, list []string) bool {
