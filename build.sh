@@ -1,1 +1,1 @@
-V1
+docker build -t docker-modjk-bridge . 
