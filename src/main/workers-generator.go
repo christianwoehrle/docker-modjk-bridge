@@ -1,8 +1,6 @@
 package main
-
 import (
 	"container/list"
-	"errors"
 	"flag"
 	"fmt"
 	dockerapi "github.com/fsouza/go-dockerclient"
@@ -12,17 +10,9 @@ import (
 	"strings"
 )
 
-var Version string
+var Version string = "v1"
 
 var debug = false
-
-var hostIp = flag.String("ip", "", "IP for ports mapped to the host")
-var internal = flag.Bool("internal", false, "Use internal ports instead of published ones")
-var refreshInterval = flag.Int("ttl-refresh", 0, "Frequency with which service TTLs are refreshed")
-var refreshTtl = flag.Int("ttl", 0, "TTL for services (default is no expiry)")
-var forceTags = flag.String("tags", "", "Append tags for all registered services")
-var resyncInterval = flag.Int("resync", 0, "Frequency with which services are resynchronized")
-var deregister = flag.String("deregister", "always", "Deregister exited services \"always\" or \"on-success\"")
 
 var worker_template string = "worker.template_ajp13.type=ajp13\n" +
 	"worker.template_ajp13.connection_pool_timeout=300\n" +
@@ -50,14 +40,6 @@ func assert(err error) {
 	}
 }
 
-type TomcatInstance struct {
-	HostIp          string
-	Internal        bool
-	ForceTags       string
-	RefreshTtl      int
-	RefreshInterval int
-	DeregisterCheck string
-}
 
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
@@ -65,18 +47,12 @@ func main() {
 		os.Exit(0)
 	}
 	flag.Parse()
-
-	if *hostIp != "" {
-		log.Println("Forcing host IP to", *hostIp)
-	}
-	if (*refreshTtl == 0 && *refreshInterval > 0) || (*refreshTtl > 0 && *refreshInterval == 0) {
-		assert(errors.New("-ttl and -ttl-refresh must be specified together or not at all"))
-	} else if *refreshTtl > 0 && *refreshTtl <= *refreshInterval {
-		assert(errors.New("-ttl must be greater than -ttl-refresh"))
-	}
-
-	docker, err := dockerapi.NewClient(getopt("DOCKER_HOST", "unix:///var/run/docker.sock"))
+	dockerconnecttring := getopt("DOCKER_HOST", "tcp://192.168.1.125:2375")
+	log.Println("connecstring", dockerconnecttring)
+	
+	docker, err := dockerapi.NewClient(getopt("DOCKER_HOST", "tcp://192.168.1.125:2375"))
 	assert(err)
+	log.Println(err)
 
 	// Start event listener before listing containers to avoid missing anything
 	events := make(chan *dockerapi.APIEvents)
@@ -101,8 +77,14 @@ func main() {
 			//for
 		case "die":
 			log.Println("Die event ...")
+			workersString := createWorkers()
+			writeFile("/tmp/workers.properties", workersString)
+
 		case "stop", "kill":
 			log.Println("Stop event ...")
+			workersString := createWorkers()
+			writeFile("/tmp/workers.properties", workersString)
+
 		}
 	}
 
@@ -111,6 +93,8 @@ func main() {
 
 }
 
+
+// Reads consul information about tomcat instances and returns the workers.properties file
 func createWorkers() string {
 
 	config := consulapi.DefaultConfig()
@@ -143,7 +127,9 @@ func createWorkers() string {
 		}
 		tags := service.Tags
 		if stringInSlice("tomcat-service", tags) {
-			log.Println("TOMCAT SERVICE!!!!!!!!!!!!!!!")
+			if debug {
+				log.Println("TOMCAT SERVICE!!!!!!!!!!!!!!!")
+			}
 			clusterMap[service.Service] = service
 			//tomcatServices[i] = service
 			tomcatList.PushBack(service)
@@ -205,10 +191,8 @@ func createWorkers() string {
 			workersFile = workersFile + "worker." + key + ".reference=worker.template_ajp13 \n"
 		}
 	}
-
 	log.Println("---------------------------------------------------------")
 	log.Println(worker_list, workersFile, worker_template)
-
 	writeFile("/tmp/workers.properties", worker_list+workersFile+worker_template)
 
 	//log.Println("getTagValue 123  12345", getTagValue("123", []string {"12345"}))
