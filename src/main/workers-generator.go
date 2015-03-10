@@ -1,4 +1,5 @@
 package main
+
 import (
 	"container/list"
 	"flag"
@@ -13,6 +14,10 @@ import (
 var Version string = "v1"
 
 var debug = false
+
+var dockerAddress = flag.String("dockerAddress", "tcp://192.168.1.125:2375", "Address for docker (where events are collected")
+var workersDir = flag.String("workersDir", "/tmp/", "Pfad where the workers.properties File is written to")
+var consulAddress = flag.String("consulAddress", "192.168.1.125:8500", "Address for consul (where information about tomcat instances are gathered")
 
 var worker_template string = "worker.template_ajp13.type=ajp13\n" +
 	"worker.template_ajp13.connection_pool_timeout=300\n" +
@@ -40,17 +45,16 @@ func assert(err error) {
 	}
 }
 
-
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
 		fmt.Println(Version)
 		os.Exit(0)
 	}
 	flag.Parse()
-	dockerconnecttring := getopt("DOCKER_HOST", "tcp://192.168.1.125:2375")
+	log.Println("dockerAddress", *dockerAddress)
+	dockerconnecttring := getopt("DOCKER_HOST", *dockerAddress)
 	log.Println("connecstring", dockerconnecttring)
-	
-	docker, err := dockerapi.NewClient(getopt("DOCKER_HOST", "tcp://192.168.1.125:2375"))
+	docker, err := dockerapi.NewClient(getopt("DOCKER_HOST", dockerconnecttring))
 	assert(err)
 	log.Println(err)
 
@@ -59,7 +63,7 @@ func main() {
 	assert(docker.AddEventListener(events))
 
 	workersString := createWorkers()
-	writeFile("/tmp/workers.properties", workersString)
+	writeFile(*workersDir +"workers.properties", workersString)
 	if debug {
 		log.Println("Listening for Docker events ...")
 	}
@@ -72,18 +76,18 @@ func main() {
 		case "start":
 			log.Println("Start event ...")
 			workersString := createWorkers()
-			writeFile("/tmp/workers.properties", workersString)
+			writeFile(*workersDir+"workers.properties", workersString)
 
 			//for
 		case "die":
 			log.Println("Die event ...")
 			workersString := createWorkers()
-			writeFile("/tmp/workers.properties", workersString)
+			writeFile(*workersDir+"workers.properties", workersString)
 
 		case "stop", "kill":
 			log.Println("Stop event ...")
 			workersString := createWorkers()
-			writeFile("/tmp/workers.properties", workersString)
+			writeFile(*workersDir+"workers.properties", workersString)
 
 		}
 	}
@@ -93,12 +97,11 @@ func main() {
 
 }
 
-
 // Reads consul information about tomcat instances and returns the workers.properties file
 func createWorkers() string {
 
 	config := consulapi.DefaultConfig()
-	config.Address = "192.168.1.125:8500"
+	config.Address = *consulAddress
 	client, res := consulapi.NewClient(config)
 	if debug {
 		if debug {
