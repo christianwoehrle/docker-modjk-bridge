@@ -8,6 +8,7 @@ import (
 	consulapi "github.com/hashicorp/consul/api"
 	"log"
 	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -16,8 +17,10 @@ var Version string = "v1"
 var debug = false
 
 var dockerAddress = flag.String("dockerAddress", "tcp://192.168.1.125:2375", "Address for docker (where events are collected")
-var workersDir = flag.String("workersDir", "/tmp/", "Pfad where the workers.properties File is written to")
+var workersDir = flag.String("workersDir", "/usr/local/apache2/conf/mod_jk/", "Pfad where the workers.properties File is written to")
 var consulAddress = flag.String("consulAddress", "192.168.1.125:8500", "Address for consul (where information about tomcat instances are gathered")
+var reconfigureCommand = flag.String("reconfigureCommand", "/usr/local/apache2/bin/restart.sh", "Optional Command to read the new Configuration created in the workers.properties File")  
+
 
 var worker_template string = "worker.template_ajp13.type=ajp13\n" +
 	"worker.template_ajp13.connection_pool_timeout=300\n" +
@@ -67,6 +70,7 @@ func main() {
 	if debug {
 		log.Println("Listening for Docker events ...")
 	}
+	restart()
 
 	quit := make(chan struct{})
 
@@ -77,7 +81,7 @@ func main() {
 			log.Println("Start event ...")
 			workersString := createWorkers()
 			writeFile(*workersDir+"workers.properties", workersString)
-
+			restart()
 			//for
 		case "die":
 			log.Println("Die event ...")
@@ -172,7 +176,8 @@ func createWorkers() string {
 
 			if tomcatServices[key] != nil {
 				if tomcatServices[key].Service == worker {
-					cluster_worker = cluster_worker + tomcatServices[key].ID + ","
+					_, key, _, _ := splitServiceName(tomcatServices[key].ID)
+					cluster_worker = cluster_worker + key + ","
 				}
 			}
 		}
@@ -196,7 +201,6 @@ func createWorkers() string {
 	}
 	log.Println("---------------------------------------------------------")
 	log.Println(worker_list, workersFile, worker_template)
-	writeFile("/tmp/workers.properties", worker_list+workersFile+worker_template)
 
 	//log.Println("getTagValue 123  12345", getTagValue("123", []string {"12345"}))
 	//log.Println("getTagValue 123  012345,123abd", getTagValue("123", []string {"012345", "123abd"}))
@@ -219,6 +223,17 @@ func getTagValue(tagname string, taglist []string) string {
 		}
 	}
 	return ""
+}
+
+func restart( ) int {
+	log.Println("Aufruf restart", *reconfigureCommand)
+	//args := []string  {"-k", "restart"}
+	cmd := exec.Command(*reconfigureCommand )
+	err := cmd.Run()
+	//_, res := os.StartProcess("/usr/local/apache2/bin/httpd", args, nil)
+	log.Println("Aufruf restart", err)
+	  
+	return 1
 }
 
 func writeFile(filename string, content string) int {
