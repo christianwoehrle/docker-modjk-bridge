@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"path/filepath"
 )
 
 var Version string = "v1"
@@ -20,7 +21,8 @@ var dockerAddress = flag.String("dockerAddress", "tcp://192.168.1.125:2375", "Ad
 var workersDir = flag.String("workersDir", "/usr/local/apache2/conf/mod_jk/", "Pfad where the workers.properties File is written to")
 var consulAddress = flag.String("consulAddress", "192.168.1.125:8500", "Address for consul (where information about tomcat instances are gathered")
 var reconfigureCommand = flag.String("reconfigureCommand", "/usr/local/apache2/bin/restart.sh", "Optional Command to read the new Configuration created in the workers.properties File")  
-
+var dockerTlsVerifiy = flag.String("DOCKER_TLS_VERIFY", "0", "Use TLS?")
+var DOCKER_CERT_PATH = flag.String("DOCKER_CERT_PATH", "", "Path to docker certificates")
 
 var worker_template string = "worker.template_ajp13.type=ajp13\n" +
 	"worker.template_ajp13.connection_pool_timeout=300\n" +
@@ -28,9 +30,9 @@ var worker_template string = "worker.template_ajp13.type=ajp13\n" +
 	"worker.template_ajp13.ping_mode=A\n" +
 	"worker.template_ajp13.ping_timeout=10000\n" +
 	"worker.template_ajp13.lbfactor=10\n" +
-	"worker.template_ajp13.retries=2\n" +
 	"worker.template_ajp13.activation=A\n" +
 	"worker.template_ajp13.recovery_options=7\n" +
+	"worker.template_ajp13.retries=2\n" +
 	"worker.template_ajp13.method=Session\n" +
 	"worker.template_ajp13.socket_connect_timeout=10000\n" +
 	"worker.jkstatus.type=status"
@@ -48,6 +50,7 @@ func assert(err error) {
 	}
 }
 
+
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
 		fmt.Println(Version)
@@ -57,7 +60,22 @@ func main() {
 	log.Println("dockerAddress", *dockerAddress)
 	dockerconnecttring := getopt("DOCKER_HOST", *dockerAddress)
 	log.Println("connecstring", dockerconnecttring)
-	docker, err := dockerapi.NewClient(getopt("DOCKER_HOST", dockerconnecttring))
+	
+	var docker *(dockerapi.Client)
+	var err error
+	
+	if *dockerTlsVerifiy == "1"  { 
+	    fn := filepath.Join(*DOCKER_CERT_PATH, "cert.pem")
+		certFile := fn
+		fn = filepath.Join(*DOCKER_CERT_PATH, "key.pem")
+		keyFile := fn
+		fn = filepath.Join(*DOCKER_CERT_PATH, "ca.pem")
+		caFile := fn
+		
+		docker, err = dockerapi.NewTLSClient(dockerconnecttring, certFile, keyFile, caFile) 
+	} else {
+		docker, err = dockerapi.NewClient(getopt("DOCKER_HOST", dockerconnecttring))
+	}
 	assert(err)
 	log.Println(err)
 
@@ -94,8 +112,8 @@ func main() {
 			writeFile(*workersDir+"workers.properties", workersString)
 
 		}
-	}
 
+	}
 	close(quit)
 	log.Fatal("Docker event loop closed") // todo: reconnect?
 
@@ -255,6 +273,7 @@ func stringInSlice(a string, list []string) bool {
 		if b == a {
 			return true
 		}
+
 	}
 	return false
 }
