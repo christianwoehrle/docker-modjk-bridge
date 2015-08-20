@@ -302,17 +302,36 @@ func restart( ) int {
 }
 
 func writeFile(filename string, content string) int {
-	log.Println("writeFile: ", filename)
-	file, err := os.Create(filename)
+	now := time.Now()
+	
+	backupFilename := filename + "_backup_" + now.Format(time.RFC3339)
+	file, err := os.Create(backupFilename)
+	log.Println("write Backup File: ", backupFilename)
 	if err != nil {
-		log.Println(err, filename)
+		log.Println("Fehler beim Öffnen" + err.Error(), backupFilename)
 		return 1
 	}
 	defer file.Close()
 	_, err = file.WriteString(content)
-	log.Println(err, filename)
-	
 	if err != nil {
+		log.Println("Fehler beim Schreiben" + err.Error(), backupFilename)
+		return 1
+	}
+
+	log.Println("write File: ", filename)
+	file2, err2 := os.Create(filename)
+	if err2 != nil {
+		log.Println("Fehler beim Öffnen" + err2.Error(), filename)
+		return 1
+	}
+	defer file2.Close()
+	_, err2 = file.WriteString(content)
+	if err2 != nil {
+		log.Println("Fehler beim Schreiben" + err2.Error(), filename)
+		return 1
+	}
+	
+	if err2 != nil {
 		return 2
 	}
 	return 0
