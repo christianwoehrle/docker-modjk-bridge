@@ -325,7 +325,7 @@ func writeFile(filename string, content string) int {
 		return 1
 	}
 	defer file2.Close()
-	_, err2 = file.WriteString(content)
+	_, err2 = file2.WriteString(content)
 	if err2 != nil {
 		log.Println("Fehler beim Schreiben" + err2.Error(), filename)
 		return 1
