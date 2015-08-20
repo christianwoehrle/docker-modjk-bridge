@@ -19,9 +19,10 @@ var Version string = "v1"
 var debug = false
 //dockerAddress kann auch unix:/var/run/docker.sock sein
 
-var dockerAddress = flag.String("dockerAddress", "tcp://192.168.1.125:2375", "Address for docker (where events are collected")
-var workersDir = flag.String("workersDir", "/usr/local/apache2/conf/", "Pfad where the workers.properties File is written to")
-var consulAddress = flag.String("consulAddress", "192.168.1.125:8500", "Address for consul (where information about tomcat instances are gathered")
+var dockerAddress = flag.String("dockerAddress", "tcp://192.168.59.103:2375", "Address for docker (where events are collected")
+var workersDir = flag.String("workersDir", "/tmp/", "Pfad where the workers.properties File is written to")
+//var workersDir = flag.String("workersDir", "/usr/local/apache2/conf/", "Pfad where the workers.properties File is written to")
+var consulAddress = flag.String("consulAddress", "192.168.59.103:8500", "Address for consul (where information about tomcat instances are gathered")
 var reconfigureCommand = flag.String("reconfigureCommand", "/usr/local/apache2/bin/restart.sh", "Optional Command to read the new Configuration created in the workers.properties File")  
 var dockerTlsVerifiy = flag.String("DOCKER_TLS_VERIFY", "0", "Use TLS?")
 var DOCKER_CERT_PATH = flag.String("DOCKER_CERT_PATH", "/Users/cwoehrle/.boot2docker/certs/boot2docker-vm/", "Path to docker certificates")
