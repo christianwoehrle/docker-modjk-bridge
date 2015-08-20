@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"flag"
 	"fmt"
+	"time"
 	dockerapi "github.com/fsouza/go-dockerclient"
 	consulapi "github.com/hashicorp/consul/api"
 	"log"
@@ -16,13 +17,14 @@ import (
 var Version string = "v1"
 
 var debug = false
+//dockerAddress kann auch unix:/var/run/docker.sock sein
 
 var dockerAddress = flag.String("dockerAddress", "tcp://192.168.1.125:2375", "Address for docker (where events are collected")
-var workersDir = flag.String("workersDir", "/usr/local/apache2/conf/mod_jk/", "Pfad where the workers.properties File is written to")
+var workersDir = flag.String("workersDir", "/usr/local/apache2/conf/", "Pfad where the workers.properties File is written to")
 var consulAddress = flag.String("consulAddress", "192.168.1.125:8500", "Address for consul (where information about tomcat instances are gathered")
 var reconfigureCommand = flag.String("reconfigureCommand", "/usr/local/apache2/bin/restart.sh", "Optional Command to read the new Configuration created in the workers.properties File")  
 var dockerTlsVerifiy = flag.String("DOCKER_TLS_VERIFY", "0", "Use TLS?")
-var DOCKER_CERT_PATH = flag.String("DOCKER_CERT_PATH", "", "Path to docker certificates")
+var DOCKER_CERT_PATH = flag.String("DOCKER_CERT_PATH", "/Users/cwoehrle/.boot2docker/certs/boot2docker-vm/", "Path to docker certificates")
 
 var worker_template string = "worker.template_ajp13.type=ajp13\n" +
 	"worker.template_ajp13.connection_pool_timeout=300\n" +
@@ -59,35 +61,53 @@ func main() {
 	flag.Parse()
 	log.Println("dockerAddress", *dockerAddress)
 	dockerconnecttring := getopt("DOCKER_HOST", *dockerAddress)
-	log.Println("connecstring", dockerconnecttring)
+	log.Println("workersDir", *workersDir)
+	log.Println("consulAddress", *consulAddress)
+	log.Println("reconfigureCommand", *reconfigureCommand)
+	log.Println("dockerTlsVerify", *dockerTlsVerifiy)
+	log.Println("DOCKER_CERT_PATH", *DOCKER_CERT_PATH)
+	log.Println("docker connectstring", dockerconnecttring)
 	
 	var docker *(dockerapi.Client)
 	var err error
 	
 	if *dockerTlsVerifiy == "1"  { 
+    	log.Println("dockerTlsVerify = 1")
 	    fn := filepath.Join(*DOCKER_CERT_PATH, "cert.pem")
+	    if _, err := os.Stat("fn"); os.IsNotExist(err) {
+			log.Println("File ", fn , " does not exist")
+		}
 		certFile := fn
 		fn = filepath.Join(*DOCKER_CERT_PATH, "key.pem")
+	    if _, err := os.Stat("fn"); os.IsNotExist(err) {
+			log.Println("File ", fn , " does not exist")
+		}
 		keyFile := fn
 		fn = filepath.Join(*DOCKER_CERT_PATH, "ca.pem")
+	    if _, err := os.Stat("fn"); os.IsNotExist(err) {
+			log.Println("File ", fn , " does not exist")
+		}
 		caFile := fn
 		
 		docker, err = dockerapi.NewTLSClient(dockerconnecttring, certFile, keyFile, caFile) 
 	} else {
+    	log.Println("dockerTlsVerifiy = 0")
 		docker, err = dockerapi.NewClient(getopt("DOCKER_HOST", dockerconnecttring))
 	}
+	// was macht assert?
 	assert(err)
-	log.Println(err)
+
 
 	// Start event listener before listing containers to avoid missing anything
+    log.Println("Start Event Listener für Docker Events...")
 	events := make(chan *dockerapi.APIEvents)
 	assert(docker.AddEventListener(events))
 
-	workersString := createWorkers()
-	writeFile(*workersDir +"workers.properties", workersString)
-	if debug {
-		log.Println("Listening for Docker events ...")
-	}
+	workersString, res := createWorkers()
+	if res == nil {
+	    writeFile(*workersDir +"workers.properties", workersString)
+    }
+	log.Println("Listening for Docker events ...")
 	restart()
 
 	quit := make(chan struct{})
@@ -136,7 +156,9 @@ func createWorkers() (string, error) {
 	log.Println("createWorkers called to create new workers.properties File")
 
 	config := consulapi.DefaultConfig()
+	log.Println("config: ", *config)
 	config.Address = *consulAddress
+	log.Println("config: ", *config)
 	client, res := consulapi.NewClient(config)
 	if debug {
 		if debug {
@@ -262,6 +284,7 @@ func getTagValue(tagname string, taglist []string) string {
 }
 
 func restart( ) int {
+	log.Println("Restart WebServer")
 	log.Println("Aufruf restart", *reconfigureCommand)
 	//args := []string  {"-k", "restart"}
 	cmd := exec.Command(*reconfigureCommand )
@@ -273,6 +296,7 @@ func restart( ) int {
 }
 
 func writeFile(filename string, content string) int {
+	log.Println("writeFile: ", filename)
 	file, err := os.Create(filename)
 	if err != nil {
 		log.Println(err, filename)
@@ -280,6 +304,8 @@ func writeFile(filename string, content string) int {
 	}
 	defer file.Close()
 	_, err = file.WriteString(content)
+	log.Println(err, filename)
+	
 	if err != nil {
 		return 2
 	}
