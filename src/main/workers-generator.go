@@ -97,19 +97,31 @@ func main() {
 		switch msg.Status {
 		case "start":
 			log.Println("Start event ...")
-			workersString := createWorkers()
-			writeFile(*workersDir+"workers.properties", workersString)
+			log.Println("sleeping 3s ...")
+			time.Sleep( 3*time.Second )
+			log.Println("sleeping done")
+			
+			workersString, res := createWorkers()
+			if res == nil {
+	    		writeFile(*workersDir +"workers.properties", workersString)
+    		}
 			restart()
 			//for
 		case "die":
 			log.Println("Die event ...")
-			workersString := createWorkers()
-			writeFile(*workersDir+"workers.properties", workersString)
+			workersString, res := createWorkers()
+			if res == nil {
+	    		writeFile(*workersDir +"workers.properties", workersString)
+    		}
 
 		case "stop", "kill":
 			log.Println("Stop event ...")
-			workersString := createWorkers()
-			writeFile(*workersDir+"workers.properties", workersString)
+			workersString, res := createWorkers()
+			if res == nil {
+	    		writeFile(*workersDir +"workers.properties", workersString)
+    		}
+			default: 
+			log.Println("Default Event, was ist denn das?")
 
 		}
 
@@ -120,7 +132,8 @@ func main() {
 }
 
 // Reads consul information about tomcat instances and returns the workers.properties file
-func createWorkers() string {
+func createWorkers() (string, error) {
+	log.Println("createWorkers called to create new workers.properties File")
 
 	config := consulapi.DefaultConfig()
 	config.Address = *consulAddress
@@ -131,12 +144,17 @@ func createWorkers() string {
 			log.Println("Client", client, res)
 		}
 	}
+
 	agent := client.Agent()
 	nodename, res := agent.NodeName()
-	if debug {
-		log.Println("NodeName", nodename, res)
-	}
+	log.Println("NodeName", nodename, res)
 	services, res := agent.Services()
+	log.Println("res", res)
+	if res != nil {
+		log.Fatal("Error calling consul: ", res )
+		log.Fatal("workers.properties is not created!" )
+		return "", res
+	}
 
 	clusterMap := make(map[string]*consulapi.AgentService)
 	//tomcatServices := [100]*consulapi.AgentService{}
@@ -223,7 +241,7 @@ func createWorkers() string {
 	//log.Println("getTagValue 123  12345", getTagValue("123", []string {"12345"}))
 	//log.Println("getTagValue 123  012345,123abd", getTagValue("123", []string {"012345", "123abd"}))
 	//log.Println("getTagValue 123  11aa12345", getTagValue("123", []string {"11aa12345"}))
-	return worker_list + workersFile + worker_template
+	return worker_list + workersFile + worker_template, nil
 }
 
 //dude-server:tomcat_dude-server_8217:8009
