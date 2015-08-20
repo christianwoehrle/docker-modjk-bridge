@@ -160,24 +160,29 @@ func createWorkers() (string, error) {
 	log.Println("config: ", *config)
 	config.Address = *consulAddress
 	log.Println("config: ", *config)
+
 	client, res := consulapi.NewClient(config)
-	if debug {
-		if debug {
+	log.Println("Client", client, res)
 
-			log.Println("Client", client, res)
-		}
-	}
-
+	log.Println("create Agent", client, res)
 	agent := client.Agent()
+
+	log.Println("getNodename-x")
 	nodename, res := agent.NodeName()
-	log.Println("NodeName", nodename, res)
-	services, res := agent.Services()
-	log.Println("res", res)
+	log.Println("after getNodename")
 	if res != nil {
-		log.Fatal("Error calling consul: ", res )
-		log.Fatal("workers.properties is not created!" )
+		log.Println("Error calling consul2: ", res )
+		log.Println("workers.properties is not created!" )
 		return "", res
 	}
+	log.Println("NodeName", nodename, res)
+	services, res := agent.Services()
+	if res != nil {
+		log.Println("Error calling consul: ", res )
+		log.Println("workers.properties is not created!" )
+		return "", res
+	}
+	log.Println("res", res)
 
 	clusterMap := make(map[string]*consulapi.AgentService)
 	//tomcatServices := [100]*consulapi.AgentService{}
@@ -285,7 +290,7 @@ func getTagValue(tagname string, taglist []string) string {
 }
 
 func restart( ) int {
-	log.Println("Restart WebServer")
+	log.Println("Restart WebServer")	
 	log.Println("Aufruf restart", *reconfigureCommand)
 	//args := []string  {"-k", "restart"}
 	cmd := exec.Command(*reconfigureCommand )
